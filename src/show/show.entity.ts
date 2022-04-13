@@ -21,6 +21,9 @@ export class Show extends BaseEntity {
     @Column()
     startTime: Date;
 
+    @Column({ type: 'double' })
+    duration: Number;
+
     @Column()
     smartSync: number;
 

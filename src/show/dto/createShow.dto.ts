@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, Length, MaxLength } from "class-validator";
+import { IsBoolean, IsOptional, IsString, Length, MaxLength } from "class-validator";
 
 export class CreateShowDTO {
     @IsString()
@@ -18,9 +18,9 @@ export class CreateShowDTO {
     @MaxLength(250)
     subtitleUrl: string;
 
-    @IsOptional()
-    @IsNumber()
-    sortOrder: number;
+    @IsString()
+    @Length(1, 64)
+    startTime: string;
 
     @IsBoolean()
     smartSync: boolean;
