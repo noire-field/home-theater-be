@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Patch, UseGuards, ValidationPipe, Delete, ParseIntPipe, Param, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CreateShowDTO } from './dto/createShow.dto';
-import { UpdateEpisodeDTO } from './dto/UpdateEpisode.dto';
+import { UpdateShowDTO } from './dto/updateShow.dto';
 import { Show } from './show.entity';
 import { ShowService } from './show.service';
 
@@ -16,22 +16,21 @@ export class ShowController {
         return this.showService.Create(createShowDTO);
     }
 
-    /*
     @Get()
-    GetEpisodeList(@Query('seasonId', ParseIntPipe) seasonId: number): any {
-        return this.episodeService.GetList(seasonId);
+    async GetShowList(): Promise<Show[]> {
+        return this.showService.GetList();
     }
 
     @Patch(':id')
-    async UpdateEpisode(
+    async UpdateShow(
         @Param('id', ParseIntPipe) id: number, 
-        @Body(ValidationPipe) updateEpisodeDTO: UpdateEpisodeDTO): Promise<Episode> 
+        @Body(ValidationPipe) updateShowDTO: UpdateShowDTO): Promise<Show> 
     {
-        return this.episodeService.Update(id, updateEpisodeDTO);
+        return this.showService.Update(id, updateShowDTO);
     }
 
     @Delete(':id')
-    async DeleteEpisode(@Param('id', ParseIntPipe) id: number): Promise<void> {
-        return this.episodeService.Delete(id);
-    }*/
+    async DeleteShow(@Param('id', ParseIntPipe) id: number): Promise<void> {
+        return this.showService.Delete(id);
+    }
 }

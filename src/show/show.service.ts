@@ -10,7 +10,7 @@ import { Show } from './show.entity';
 import { ShowRepository } from './show.repository';
 
 import { CreateShowDTO } from './dto/createShow.dto';
-import { UpdateEpisodeDTO } from './dto/UpdateEpisode.dto';
+import { UpdateShowDTO } from './dto/updateShow.dto';
 import { ShowStatus } from './showStatus.enum';
 
 @Injectable()
@@ -61,95 +61,92 @@ export class ShowService {
         return show;
     }
 
-    /*
-    async GetList(seasonId: number): Promise<Episode[]> {
-        const season = await this.FindSeason(seasonId);
-        const episodes = await this.episodeRepo.find({ where: { season }, order: {
-            sortOrder: 'ASC',
-            id: 'ASC'
-        } });
+    async GetList(): Promise<Show[]> {
+        const shows = await this.showRepo.find({ order: {
+            id: 'DESC'
+        }, take: 25 });
         
-        return episodes || [];
+        return shows;
     }
 
+    async Update(id: number, updateShowDTO: UpdateShowDTO): Promise<Show> {
+        const show = await this.showRepo.findOne({ id });
+        if(!show) throw new NotFoundException({ message: 'Show not found.', langCode: 'Error:Show.NotFound'});
+
+        if([ShowStatus.Scheduled, ShowStatus.Error].indexOf(show.status) === -1)
+            throw new NotFoundException({ message: 'This show can not be edited at this time.', langCode: 'Error:Dashboard.Show.CantEditAnymore'});
+        
+        show.title = updateShowDTO.title;
+        
+        if(show.passCode != updateShowDTO.passCode) {
+            const samePassShow = await this.showRepo.findOne({ passCode: updateShowDTO.passCode, status: In([ShowStatus.Processing, ShowStatus.Scheduled, ShowStatus.Watching ]) });
+            if(samePassShow)  throw new BadRequestException({ message: 'This pass code is being used by other show.', langCode: 'Error:Dashboard.Show.PassCodeIsBeingUsed' });
     
+            show.passCode = updateShowDTO.passCode;
+        }
 
-    async Update(id: number, updateEpisodeDTO: UpdateEpisodeDTO): Promise<Episode> {
-        const episode = await this.episodeRepo.findOne({ id });
-        if(!episode) throw new NotFoundException('Episode not found');
+        if(show.movieUrl != updateShowDTO.movieUrl) {
+            show.movieUrl = updateShowDTO.movieUrl;
+
+            try {
+                show.duration = await getVideoDurationInSeconds(updateShowDTO.movieUrl);
+            } catch(e) {
+                throw new BadRequestException({ message: 'Unable to verify this video url.', langCode: 'Error:Dashboard.Show.UnableToVerifyVideoUrl' });
+            }
+        } 
+
+        if(show.subtitleUrl != updateShowDTO.subtitleUrl) {
+            show.subtitleUrl = updateShowDTO.subtitleUrl || '';
+
+            if(updateShowDTO.subtitleUrl && updateShowDTO.subtitleUrl.length > 0) {
+                try {
+                    const { data } = await axios.get(updateShowDTO.subtitleUrl);
+                    const subContent = (new srtParser2).fromSrt(data);
     
-        episode.numberCode = updateEpisodeDTO.numberCode;
-        episode.sortOrder = updateEpisodeDTO.sortOrder;
+                    if(subContent.length <= 0) throw new Error();
+                } catch(e) {
+                    throw new BadRequestException({ message: 'Unable to parse this subtitle url', langCode: 'Error:Dashboard.Show.UnableToParseSubtitle' });
+                }
+            }
+        }
 
-        var willBeDeleteAt = new Date();
-        willBeDeleteAt.setSeconds(willBeDeleteAt.getSeconds() + Config.Episode.DeletionTime);
+        show.smartSync = updateShowDTO.smartSync == true ? 1 : 0;
+        show.votingControl = updateShowDTO.votingControl == true ? 1 : 0;
 
-        episode.willBeDeleteAt = willBeDeleteAt;
+        // Start Time
+        const currentTime = new Date();
+        const startTime = new Date(Number(updateShowDTO.startTime));
+        const diffTime = (startTime.getTime() - currentTime.getTime())
 
-        await episode.save();
+        if(diffTime < 5 * 60 * 1000) 
+            throw new BadRequestException({ message: 'Start time is too early, it needs to be at least 5 minutes later than current time.', langCode: 'Error:Dashboard.Show.StartTimeTooEarly' })
+
+        show.startTime = new Date(Number(updateShowDTO.startTime));
+
+        // Re-process
+        show.status = ShowStatus.Processing;
+
+        await show.save();
 
         // Log
-        const logData = updateEpisodeDTO;
-        await this.logService.InsertActionLog(LogType.Episode, LogAction.Edit, 1, id, JSON.stringify(logData));
+        //const logData = updateEpisodeDTO;
+        //await this.logService.InsertActionLog(LogType.Episode, LogAction.Edit, 1, id, JSON.stringify(logData));
 
-        return episode;
+        return show;
     }
 
     async Delete(id: number): Promise<void> {
-        const episode = await this.episodeRepo.findOne({ id }, { relations: ['files'] });
-        if(!episode) throw new NotFoundException('Episode not found');
+        const show = await this.showRepo.findOne({ id });
+        if(!show) throw new NotFoundException({ message: 'Show not found.', langCode: 'Error:Show.NotFound'});
+
+        if([ShowStatus.Finished, ShowStatus.Error, ShowStatus.Cancelled].indexOf(show.status) === -1)
+            throw new NotFoundException({ message: 'This show needs to be cancelled or finished first.', langCode: 'Error:Dashboard.Show.NeedToCancelOrFinish'});
+        
+        await show.softRemove();
 
         // Log
-        const logData = { id: episode.id, numberCode: episode.numberCode, deleteType: 'SoftDelete' };
-
-        // Delete all files
-        await this.fileService.DeleteList(episode.files);
-        await episode.softRemove();
-
-        await this.logService.InsertActionLog(LogType.Episode, LogAction.Delete, 1, id, JSON.stringify(logData));
+        //const logData = { id: episode.id, numberCode: episode.numberCode, deleteType: 'SoftDelete' };
+        //await this.logService.InsertActionLog(LogType.Episode, LogAction.Delete, 1, id, JSON.stringify(logData));
     }
 
-    async FindSeason(seasonId: number, withSeries=false): Promise<Season> {
-        const season = await this.seasonRepo.findOne(seasonId, { relations: withSeries ? ['series'] : []});
-        if(!season) throw new NotFoundException('Season not found')
-
-        return season;
-    }
-
-    // Add Log
-    @Cron(CronExpression.EVERY_MINUTE)
-    async CheckDeleteEpisode() {
-        const episodes = await this.episodeRepo.find({ where: 'NOW() >= willBeDeleteAt', relations: ['files'] });
-        if(episodes.length > 0) {
-            episodes.forEach(async (e) => {
-                await this.fileService.DeleteList(e.files);
-                await e.softRemove();
-            })
-
-            // Log
-            const logData = { deletedEpisode: episodes.map((ep) => ({ id: ep.id, numberCode: ep.numberCode })) }
-            await this.logService.InsertActionLog(LogType.Episode, LogAction.AutoDelete, 0, null, JSON.stringify(logData));
-        }
-    }
-
-    GetWeekOfMonth(date) {
-        var firstWeekday = new Date(date.getFullYear(), date.getMonth(), 1).getDay() - 1;
-        if (firstWeekday < 0) firstWeekday = 6;
-        var offsetDate = date.getDate() + firstWeekday - 1;
-        return Math.floor(offsetDate / 7);
-    }
-
-    GetWeekOfYear(d) {
-        // Copy date so don't modify original
-        d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-        // Set to nearest Thursday: current date + 4 - current day number
-        // Make Sunday's day number 7
-        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
-        // Get first day of year
-        var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-        // Calculate full weeks to nearest Thursday
-        var weekNo = Math.ceil(( ( (d - Number(yearStart)) / 86400000) + 1)/7);
-        // Return array of year and week number
-        return weekNo;
-    }*/
 }
