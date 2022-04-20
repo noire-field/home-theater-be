@@ -18,7 +18,7 @@ export class AuthService {
         const { password } = loginDTO;
         const definedPassword: string = Config.Auth.Password;
         if(!password || !definedPassword || password !== definedPassword) {
-            throw new UnauthorizedException('Invalid credentials');
+            throw new UnauthorizedException({ message: 'Invalid credentials', langCode: 'Error:InvalidCredentials' });
         }
 
         const payload: JWTPayload = {
@@ -31,7 +31,7 @@ export class AuthService {
         res.cookie('access_token', accessToken, {
             httpOnly: true,
             expires: new Date(Date.now() + (30 * 60 * 60 * 24 * 1000)),
-        }).send('OK');
+        }).send({ isAdmin: true });
     }
 
     async Verify(req: Request): Promise<any> {
@@ -44,7 +44,9 @@ export class AuthService {
         } catch(e) {
             throw new UnauthorizedException('Access token is invalid');
         }
+
+        //const jwtData = this.jwtService.decode(accessToken);
         
-        return 'OK';
+        return { isAdmin: true }
     }
 }
