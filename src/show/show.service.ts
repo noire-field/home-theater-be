@@ -26,11 +26,11 @@ export class ShowService {
         const diffTime = (startTime.getTime() - currentTime.getTime())
 
         if(diffTime < 5 * 60 * 1000) 
-            throw new BadRequestException({ message: 'Start time is too early, it needs to be at least 5 minutes later than current time.', langCode: 'Error:Dashboard.Show.StartTimeTooEarly' })
+            throw new BadRequestException({ message: 'Start time is too early, it needs to be at least 5 minutes later than current time.', langCode: 'Error:Show.StartTimeTooEarly' })
 
         // Verify PassCode (for duplication)
         const samePassShow = await this.showRepo.findOne({ passCode: createShowDTO.passCode, status: In([ShowStatus.Processing, ShowStatus.Scheduled, ShowStatus.Watching ]) });
-        if(samePassShow)  throw new BadRequestException({ message: 'This pass code is being used by other show.', langCode: 'Error:Dashboard.Show.PassCodeIsBeingUsed' });
+        if(samePassShow)  throw new BadRequestException({ message: 'This pass code is being used by other show.', langCode: 'Error:Show.PassCodeIsBeingUsed' });
 
         // Verify Subtitle
         if(createShowDTO.subtitleUrl && createShowDTO.subtitleUrl.length > 0) {
@@ -40,7 +40,7 @@ export class ShowService {
 
                 if(subContent.length <= 0) throw new Error();
             } catch(e) {
-                throw new BadRequestException({ message: 'Unable to parse this subtitle url', langCode: 'Error:Dashboard.Show.UnableToParseSubtitle' });
+                throw new BadRequestException({ message: 'Unable to parse this subtitle url.', langCode: 'Error:Show.UnableToParseSubtitle' });
             }
         }
 
@@ -48,7 +48,7 @@ export class ShowService {
         try {
             var duration = await getVideoDurationInSeconds(createShowDTO.movieUrl);
         } catch(e) {
-            throw new BadRequestException({ message: 'Unable to verify this video url.', langCode: 'Error:Dashboard.Show.UnableToVerifyVideoUrl' });
+            throw new BadRequestException({ message: 'Unable to verify this video url.', langCode: 'Error:Show.UnableToVerifyVideoUrl' });
         }
 
         // Create Show
@@ -74,13 +74,13 @@ export class ShowService {
         if(!show) throw new NotFoundException({ message: 'Show not found.', langCode: 'Error:Show.NotFound'});
 
         if([ShowStatus.Scheduled, ShowStatus.Error].indexOf(show.status) === -1)
-            throw new NotFoundException({ message: 'This show can not be edited at this time.', langCode: 'Error:Dashboard.Show.CantEditAnymore'});
+            throw new NotFoundException({ message: 'This show can not be edited at this time.', langCode: 'Error:Show.CantEditAnymore'});
         
         show.title = updateShowDTO.title;
         
         if(show.passCode != updateShowDTO.passCode) {
             const samePassShow = await this.showRepo.findOne({ passCode: updateShowDTO.passCode, status: In([ShowStatus.Processing, ShowStatus.Scheduled, ShowStatus.Watching ]) });
-            if(samePassShow)  throw new BadRequestException({ message: 'This pass code is being used by other show.', langCode: 'Error:Dashboard.Show.PassCodeIsBeingUsed' });
+            if(samePassShow)  throw new BadRequestException({ message: 'This pass code is being used by other show.', langCode: 'Error:Show.PassCodeIsBeingUsed' });
     
             show.passCode = updateShowDTO.passCode;
         }
@@ -91,7 +91,7 @@ export class ShowService {
             try {
                 show.duration = await getVideoDurationInSeconds(updateShowDTO.movieUrl);
             } catch(e) {
-                throw new BadRequestException({ message: 'Unable to verify this video url.', langCode: 'Error:Dashboard.Show.UnableToVerifyVideoUrl' });
+                throw new BadRequestException({ message: 'Unable to verify this video url.', langCode: 'Error:Show.UnableToVerifyVideoUrl' });
             }
         } 
 
@@ -105,7 +105,7 @@ export class ShowService {
     
                     if(subContent.length <= 0) throw new Error();
                 } catch(e) {
-                    throw new BadRequestException({ message: 'Unable to parse this subtitle url', langCode: 'Error:Dashboard.Show.UnableToParseSubtitle' });
+                    throw new BadRequestException({ message: 'Unable to parse this subtitle url.', langCode: 'Error:Show.UnableToParseSubtitle' });
                 }
             }
         }
@@ -119,7 +119,7 @@ export class ShowService {
         const diffTime = (startTime.getTime() - currentTime.getTime())
 
         if(diffTime < 5 * 60 * 1000) 
-            throw new BadRequestException({ message: 'Start time is too early, it needs to be at least 5 minutes later than current time.', langCode: 'Error:Dashboard.Show.StartTimeTooEarly' })
+            throw new BadRequestException({ message: 'Start time is too early, it needs to be at least 5 minutes later than current time.', langCode: 'Error:Show.StartTimeTooEarly' })
 
         show.startTime = new Date(Number(updateShowDTO.startTime));
 
@@ -140,7 +140,7 @@ export class ShowService {
         if(!show) throw new NotFoundException({ message: 'Show not found.', langCode: 'Error:Show.NotFound'});
 
         if([ShowStatus.Finished, ShowStatus.Error, ShowStatus.Cancelled].indexOf(show.status) === -1)
-            throw new NotFoundException({ message: 'This show needs to be cancelled or finished first.', langCode: 'Error:Dashboard.Show.NeedToCancelOrFinish'});
+            throw new NotFoundException({ message: 'This show needs to be cancelled or finished first.', langCode: 'Error:Show.NeedToCancelOrFinish'});
         
         await show.softRemove();
 
