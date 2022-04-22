@@ -1,10 +1,12 @@
 import Config from './../config';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { In } from 'typeorm';
+import axios from 'axios';
+
 import { getVideoDurationInSeconds } from 'get-video-duration';
 const { default: srtParser2 } = require("srt-parser-2")
-import axios from 'axios';
 
 import { Show } from './show.entity';
 import { ShowRepository } from './show.repository';
@@ -12,11 +14,15 @@ import { ShowRepository } from './show.repository';
 import { CreateShowDTO } from './dto/createShow.dto';
 import { UpdateShowDTO } from './dto/updateShow.dto';
 import { ShowStatus } from './showStatus.enum';
+import { WatchService } from 'src/watch/watch.service';
 
 @Injectable()
 export class ShowService {
+    private processorBusy: boolean = false;
+
     constructor(
-        @InjectRepository(ShowRepository) private showRepo: ShowRepository
+        @InjectRepository(ShowRepository) private showRepo: ShowRepository,
+        private watchService: WatchService
     ) {}
 
     async Create(createShowDTO: CreateShowDTO): Promise<Show | string> {
@@ -149,4 +155,27 @@ export class ShowService {
         //await this.logService.InsertActionLog(LogType.Episode, LogAction.Delete, 1, id, JSON.stringify(logData));
     }
 
+    @Cron(CronExpression.EVERY_5_SECONDS)
+    async ProcessShow() {
+        if(this.processorBusy) return;
+        
+        this.processorBusy = true;
+        const show = await this.showRepo.findOne({ status: ShowStatus.Processing });
+        if(!show) {
+            this.processorBusy = false;
+            return;
+        }
+
+        // Not much to process
+        try {
+            await this.watchService.PushToList(show);
+            show.status = ShowStatus.Scheduled;
+        } catch(e) {
+            show.status = ShowStatus.Error;
+        } 
+
+        // Processed
+        await show.save();
+        this.processorBusy = false;
+    }
 }
