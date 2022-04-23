@@ -11,7 +11,7 @@ async function bootstrap() {
 	app.use(cookieParser());
 	app.enableCors({ credentials: true, origin: Config.General.ClientDomain });
 
-	await app.listen(3000);
+	await app.listen(Config.General.MainPort);
 }
 
 bootstrap();

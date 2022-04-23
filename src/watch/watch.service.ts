@@ -1,21 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-const { default: srtParser2 } = require("srt-parser-2")
 import axios from 'axios';
+const { default: srtParser2 } = require("srt-parser-2")
 
 import { Show } from 'src/show/show.entity';
 import { ShowRepository } from 'src/show/show.repository';
 
 import { IWatchShow } from './@types/Watch.interface';
+import { WatchGateway } from './watch.gateway';
 import { WatchStatus } from './watchStatus.enum';
 
 @Injectable()
 export class WatchService {
     private watchList: Map<number, IWatchShow>;
 
-    constructor(@InjectRepository(ShowRepository) private showRepo: ShowRepository) {
+    constructor(
+        @InjectRepository(ShowRepository) private showRepo: ShowRepository,
+        private watchGateway: WatchGateway
+    ) {
         this.watchList = new Map(); 
     }
+
+    /*
+    async RequestSocketToken(): Promise<string> {
+        return 'OK';
+    }*/
 
     async GetWatchList(): Promise<any> {
         return Array.from(this.watchList);

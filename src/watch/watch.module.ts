@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from 'src/auth/auth.module';
 import { ShowRepository } from 'src/show/show.repository';
 import { WatchController } from './watch.controller';
+import { WatchGateway } from './watch.gateway';
 import { WatchService } from './watch.service';
 
 @Module({	
@@ -11,7 +12,7 @@ import { WatchService } from './watch.service';
 		TypeOrmModule.forFeature([ShowRepository]),
 	],
 	controllers: [WatchController],
-	providers: [WatchService],
+	providers: [WatchService, WatchGateway],
 	exports: [WatchService]
 })
 
