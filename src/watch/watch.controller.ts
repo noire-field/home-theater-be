@@ -1,16 +1,15 @@
-import { Controller, Get, Post } from '@nestjs/common';
-import { IWatchShow } from './@types/Watch.interface';
+import { Controller, Get, Param, Post } from '@nestjs/common';
+import { IRoomFound } from './@types/Watch.interface';
 import { WatchService } from './watch.service';
 
 @Controller('watch')
 export class WatchController {
     constructor(private readonly watchService: WatchService) { }
 
-    /*
-    @Post('/request-socket-token')
-    async RequestToken(): Promise<string> {
-        return this.watchService.RequestSocketToken();
-    }*/
+    @Get('/find-room/:passCode')
+    async FindRoom(@Param('passCode') passCode: string): Promise<IRoomFound> {
+        return this.watchService.FindRoom(passCode);
+    }
 
     @Get()
     async GetWatchList(): Promise<any> {

@@ -1,10 +1,9 @@
 import Config from './../config';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { In } from 'typeorm';
 import axios from 'axios';
-
 import { getVideoDurationInSeconds } from 'get-video-duration';
 const { default: srtParser2 } = require("srt-parser-2")
 
@@ -19,11 +18,39 @@ import { WatchService } from 'src/watch/watch.service';
 @Injectable()
 export class ShowService {
     private processorBusy: boolean = false;
+    private readonly logger = new Logger(ShowService.name);
 
     constructor(
         @InjectRepository(ShowRepository) private showRepo: ShowRepository,
         private watchService: WatchService
-    ) {}
+    ) {
+        setTimeout(this.FetchShows, 5000); // Startup
+    }
+
+    // 'this' does not work with setTimeout
+    FetchShows = async () => {
+        try {
+            var pendingShows: Show[] = await this.showRepo.find({ status: In([ShowStatus.Scheduled, ShowStatus.Watching ]) });
+            if(pendingShows.length > 0) {
+                pendingShows.forEach(async (s: Show) => {
+                    try {
+                        await this.watchService.PushToList(s, true);
+                    } catch(e: any) {
+                        s.status = ShowStatus.Error;
+                        await s.save();
+
+                        this.logger.error('Unable to push show for startup');
+                        this.logger.error(e);
+                    }
+                })
+            }
+
+            this.logger.log(`Fetched ${pendingShows.length} show(s) for startup.`);
+        } catch(e: any) {
+            setTimeout(this.FetchShows, 5000); // Error fetching? Repeat
+            this.logger.error('Unable to fetch shows for startup.');
+        }
+    }
 
     async Create(createShowDTO: CreateShowDTO): Promise<Show | string> {
         // Verify Start Time

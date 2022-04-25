@@ -17,3 +17,8 @@ export interface IWatchShow {
         list: ISubtitleLine[];
     }
 }
+
+export interface IRoomFound {
+    showTitle: string;
+    realStartTime: Date;
+}
