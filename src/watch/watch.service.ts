@@ -1,15 +1,21 @@
+import Config from './../config';
+
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { JwtService } from '@nestjs/jwt';
+import {  Request } from 'express';
 import axios from 'axios';
 const { default: srtParser2 } = require("srt-parser-2")
 
 import { Show } from 'src/show/show.entity';
 import { ShowRepository } from 'src/show/show.repository';
 
-import { IRoomFound, IWatchShow } from './@types/Watch.interface';
+import { IJoinRoom, IRoomFound, IWatchShow } from './@types/Watch.interface';
 import { WatchGateway } from './watch.gateway';
 import { WatchStatus } from './watchStatus.enum';
+import { JoinRoomDTO } from './dto/JoinRoom.dto';
+import { JWTPayload } from 'src/auth/jwt-payload.interface';
 
 @Injectable()
 export class WatchService {
@@ -19,6 +25,7 @@ export class WatchService {
 
     constructor(
         @InjectRepository(ShowRepository) private showRepo: ShowRepository,
+        private jwtService: JwtService,
         private watchGateway: WatchGateway
     ) {
         this.watchList = new Map(); 
@@ -31,6 +38,44 @@ export class WatchService {
 
         const watch = this.watchListByCode.get(passCode);
         return { showTitle: watch.show.title, realStartTime: watch.realStartTime } 
+    }
+
+    async JoinRoom(req: Request, passCode: string, joinRoomDTO: JoinRoomDTO): Promise<IJoinRoom> {
+        if(!this.watchListByCode.has(passCode))
+            throw new NotFoundException({ message: 'This room can not be found.', langCode: 'Error:Watch.RoomNotFound' });
+        
+        // Check for admin
+        const auth = await this.ManuallyCheckAuth(req);
+
+        if(await this.watchGateway.JoinRoom(passCode, joinRoomDTO, auth) !== true) 
+            throw new NotFoundException({ message: 'Unable to join this room. (Socket Not Found)', langCode: 'Error:Watch.UnableToJoinRoomSocketNotFound' });
+
+        const watch = this.watchListByCode.get(passCode);
+        
+        return { 
+            showTitle: watch.show.title, 
+            realStartTime: watch.realStartTime, 
+            subtitles: joinRoomDTO.withSubtitle && watch.subtitle.on ? watch.subtitle.list : null 
+        }
+    }
+
+    async AddWaitTime(passCode: string, minuteAmount: number): Promise<string> {
+        if(!this.watchListByCode.has(passCode))
+            throw new NotFoundException({ message: 'This room can not be found.', langCode: 'Error:Watch.RoomNotFound' });
+        
+        const watch = this.watchListByCode.get(passCode);
+        if(watch.status != WatchStatus.WATCH_WAITING) // Not in Waiting Mode anymore, can not add more time
+            throw new NotFoundException({ message: 'The movie has already started.', langCode: 'Error:Watch.MovieAlreadyStarted' });
+
+        var newStartTime = new Date(watch.realStartTime.getTime() + (minuteAmount * 60 * 1000));
+
+        watch.realStartTime = newStartTime;
+        watch.show.startTime = newStartTime;
+
+        await watch.show.save();
+        await this.watchGateway.SetStartTime(passCode, newStartTime);
+
+        return 'OK';
     }
 
     async GetWatchList(): Promise<any> {
@@ -62,6 +107,7 @@ export class WatchService {
 
                 if(subContent.length <= 0) throw new Error('Unable to parse this subtitle (no line).');
                 watchShow.subtitle.list = subContent;
+                watchShow.subtitle.on = true;
             } catch(e) {
                 throw new Error('Unable to parse this subtitle.');
             }
@@ -70,6 +116,25 @@ export class WatchService {
         // Add new show
         this.watchList.set(show.id, watchShow)
         this.watchListByCode.set(show.passCode, watchShow);
+        this.watchGateway.CreateRoom(show.passCode);
+    }
+
+    async ManuallyCheckAuth(req: Request) {
+        const defaultReturn = { auth: false, level: 0 };
+
+        if(!req || !req.cookies || !req.cookies['access_token'])
+            return defaultReturn;
+
+        var accessToken = req.cookies['access_token'];
+        try {
+            if(!this.jwtService.verify(accessToken, { secret: Config.Auth.JWTSecret }))
+                return defaultReturn;
+        } catch(e) {
+            return defaultReturn;
+        }
+
+        const jwtData: JWTPayload = this.jwtService.decode(accessToken) as JWTPayload;
+        return { auth: jwtData.loggedIn, level: jwtData.level };
     }
 
     @Cron(CronExpression.EVERY_SECOND)

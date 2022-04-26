@@ -22,3 +22,15 @@ export interface IRoomFound {
     showTitle: string;
     realStartTime: Date;
 }
+
+export interface IClientInRoom {
+    passCode: string;
+    friendlyName: string;
+    level: number;
+}
+
+export interface IJoinRoom {
+    showTitle: string;
+    realStartTime: Date;
+    subtitles?: ISubtitleLine[];
+}
