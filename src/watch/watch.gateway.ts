@@ -98,7 +98,7 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 
 		// Notify all users in room that this user has joined
 		var roomViewers = this.GetRoomViewers(roomSockets);
-		roomSockets.forEach((s: Socket) => { s.emit('UpdateViewers', roomViewers) })
+		this.SendRoomSignal(passCode, (s: Socket) => { s.emit('UpdateViewers', roomViewers) })
 		
 		return true;
 	}
@@ -107,8 +107,27 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 		if(!this.rooms.has(passCode))
 			return;
 
+		this.SendRoomSignal(passCode, (s: Socket) => { s.emit('UpdateStartTime', newStartTime.getTime()) })
+	}
+
+	StartNow(passCode: string) {
+		if(!this.rooms.has(passCode))
+			return;
+
+		// Send StartSignal
+		this.SendRoomSignal(passCode, (s: Socket) => { 
+			// s.emit('UpdateStartTime', newStartTime.getTime()) 
+		})
+	}
+
+	private SendRoomSignal(passCode: string, callback: (s: Socket) => void) {
+		if(!this.rooms.has(passCode))
+			return false;
+
 		var roomSockets: Map<string, Socket> = this.rooms.get(passCode);
-		roomSockets.forEach((s: Socket) => { s.emit('UpdateStartTime', newStartTime.getTime()) })
+		roomSockets.forEach((s: Socket) => { callback(s); })
+
+		return true;
 	}
 
 	GetRoomViewers(roomSockets: Map<string, Socket>) {

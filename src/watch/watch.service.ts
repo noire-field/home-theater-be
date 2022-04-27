@@ -16,6 +16,7 @@ import { WatchGateway } from './watch.gateway';
 import { WatchStatus } from './watchStatus.enum';
 import { JoinRoomDTO } from './dto/JoinRoom.dto';
 import { JWTPayload } from 'src/auth/jwt-payload.interface';
+import { ShowStatus } from 'src/show/showStatus.enum';
 
 @Injectable()
 export class WatchService {
@@ -74,6 +75,24 @@ export class WatchService {
 
         await watch.show.save();
         await this.watchGateway.SetStartTime(passCode, newStartTime);
+
+        return 'OK';
+    }
+
+    async StartNow(passCode: string): Promise<string> {
+        if(!this.watchListByCode.has(passCode))
+            throw new NotFoundException({ message: 'This room can not be found.', langCode: 'Error:Watch.RoomNotFound' });
+        const watch = this.watchListByCode.get(passCode);
+        if(watch.status != WatchStatus.WATCH_WAITING) // Not in Waiting Mode anymore, can not start
+            throw new NotFoundException({ message: 'The movie has already started.', langCode: 'Error:Watch.MovieAlreadyStarted' });
+
+        watch.status = WatchStatus.WATCH_ONLINE;
+
+        /* // Not Yet!
+        watch.show.status = ShowStatus.Watching;
+        await watch.show.save(); */
+
+        await this.watchGateway.StartNow(passCode);
 
         return 'OK';
     }

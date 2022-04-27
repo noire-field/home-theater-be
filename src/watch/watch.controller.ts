@@ -32,7 +32,15 @@ export class WatchController {
         @Body('minuteAmount', ParseIntPipe) minuteAmount: number
     ): Promise<string> {
         return this.watchService.AddWaitTime(passCode, minuteAmount);
-    }   
+    }
+
+    @UseGuards(AuthGuard())
+    @Patch('/room/:passCode/start-now')
+    async StartNow(
+        @Param('passCode') passCode: string
+    ): Promise<string> {
+        return this.watchService.StartNow(passCode);
+    }
 
     @Get()
     async GetWatchList(): Promise<any> {
