@@ -6,7 +6,7 @@ import { BadRequestException, forwardRef, Inject, Injectable } from '@nestjs/com
 
 import { WatchService } from './watch.service';
 import { JoinRoomDTO } from './dto/JoinRoom.dto';
-import { IClientInRoom } from './@types/Watch.interface';
+import { IClientInRoom, IWatchShow } from './@types/Watch.interface';
 
 @WebSocketGateway(Config.General.SocketPort, { 
 	namespace: "watch",
@@ -110,13 +110,16 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 		this.SendRoomSignal(passCode, (s: Socket) => { s.emit('UpdateStartTime', newStartTime.getTime()) })
 	}
 
-	StartNow(passCode: string) {
-		if(!this.rooms.has(passCode))
+	StartShow(watch: IWatchShow) {
+		if(!this.rooms.has(watch.show.passCode))
 			return;
 
 		// Send StartSignal
-		this.SendRoomSignal(passCode, (s: Socket) => { 
-			// s.emit('UpdateStartTime', newStartTime.getTime()) 
+		this.SendRoomSignal(watch.show.passCode, (s: Socket) => { 
+			s.emit('PrepareToWatch', { 
+				videoUrl: watch.show.movieUrl,
+				watchStatus: watch.status // WatchStatus.WATCH_INIT
+			}) 
 		})
 	}
 
