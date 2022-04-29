@@ -12,6 +12,8 @@ export interface IWatchShow {
     show: Show;
     status: WatchStatus;
     realStartTime: Date;
+    playing: boolean;
+    progress: number;
     subtitle: {
         on: boolean;
         list: ISubtitleLine[];

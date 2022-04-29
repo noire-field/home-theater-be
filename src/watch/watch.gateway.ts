@@ -7,6 +7,7 @@ import { BadRequestException, forwardRef, Inject, Injectable } from '@nestjs/com
 import { WatchService } from './watch.service';
 import { JoinRoomDTO } from './dto/JoinRoom.dto';
 import { IClientInRoom, IWatchShow } from './@types/Watch.interface';
+import { WatchStatus } from './watchStatus.enum';
 
 @WebSocketGateway(Config.General.SocketPort, { 
 	namespace: "watch",
@@ -28,16 +29,60 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 		this.clientInRoom = new Map();
 	}
 
-	@SubscribeMessage('message')
-	handleMessage(client: Socket, payload: any): string {
-		console.log(client.id)
-		console.log(payload);
-		client.emit('response', 'OK!');
-		return 'Hello world!';
+	@SubscribeMessage('ClientJoinedRoom')
+	OnClientJoinedRoom(client: Socket, payload: { passCode: string }): void {
+		if(!this.VerifyClient(payload.passCode, client.id))
+			return;
+
+		// Room Current Status?
+		const watch: IWatchShow = this.watchService.GetRoom(payload.passCode);
+		if(watch) {
+			switch(watch.status) {
+				case WatchStatus.WATCH_INIT:
+					client.emit('PrepareToWatch', { 
+						videoUrl: watch.show.movieUrl,
+						watchStatus: watch.status // WatchStatus.WATCH_INIT
+					}) 
+					break;
+				case WatchStatus.WATCH_ONLINE:
+					client.emit('StartWatching', { 
+						videoUrl: watch.show.movieUrl,
+						watchStatus: watch.status, // WatchStatus.WATCH_ONLINE
+						playing: watch.playing,
+						progress: watch.playing ? 0.0 : watch.progress,
+						progressAtTime: watch.realStartTime.getTime()
+					}) 
+					
+					break;
+			}
+		}
+	}
+
+	@SubscribeMessage('VideoAction')
+	OnVideoAction(client: Socket, payload: { passCode: string, action: string }) {
+		if(!this.VerifyClient(payload.passCode, client.id))
+			return;
+
+		const clientInRoom = this.clientInRoom.get(client.id);
+		if(clientInRoom.level <= 0) return;
+
+		const watch = this.watchService.GetRoom(payload.passCode);
+		if(!watch) return;
+
+		switch(payload.action) {
+			case 'Pause':
+				if(this.watchService.PauseShow(watch))
+					this.SendRoomSignal(payload.passCode, (s: Socket) => { s.emit('VideoAction', { action: 'Pause', data: { progress: watch.progress } }) })
+				break;
+			case 'Resume':
+				if(this.watchService.ResumeShow(watch))
+					this.SendRoomSignal(payload.passCode, (s: Socket) => { s.emit('VideoAction', { action: 'Resume', data: { progress: watch.progress, realStartTime: watch.realStartTime } }) })
+				break;
+		}
 	}
 
 	afterInit(server: Server) {
-		console.log('INIT');
+		console.log('Socket Initialized')
 	}
 	
 	handleDisconnect(client: Socket) {
@@ -53,7 +98,7 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 
 				// Notify all users in room that this user has joined
 				var roomViewers = this.GetRoomViewers(roomSockets);
-				roomSockets.forEach((s: Socket) => { s.emit('UpdateViewers', roomViewers) })	
+				this.SendRoomSignal(clientInRoom.passCode, (s: Socket) => { s.emit('UpdateViewers', roomViewers) })
 			}
 
 			this.clientInRoom.delete(client.id);
@@ -99,6 +144,8 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 		// Notify all users in room that this user has joined
 		var roomViewers = this.GetRoomViewers(roomSockets);
 		this.SendRoomSignal(passCode, (s: Socket) => { s.emit('UpdateViewers', roomViewers) })
+
+		// Next Event: ClientJoinedRoom
 		
 		return true;
 	}
@@ -110,7 +157,7 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 		this.SendRoomSignal(passCode, (s: Socket) => { s.emit('UpdateStartTime', newStartTime.getTime()) })
 	}
 
-	StartShow(watch: IWatchShow) {
+	PrepareShow(watch: IWatchShow) {
 		if(!this.rooms.has(watch.show.passCode))
 			return;
 
@@ -119,6 +166,22 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 			s.emit('PrepareToWatch', { 
 				videoUrl: watch.show.movieUrl,
 				watchStatus: watch.status // WatchStatus.WATCH_INIT
+			}) 
+		})
+	}
+
+	StartShow(watch: IWatchShow) {
+		if(!this.rooms.has(watch.show.passCode))
+			return;
+
+		// Send StartSignal
+		this.SendRoomSignal(watch.show.passCode, (s: Socket) => { 
+			s.emit('StartWatching', { 
+				videoUrl: watch.show.movieUrl,
+				watchStatus: watch.status, // WatchStatus.WATCH_ONLINE
+				playing: watch.playing,
+				progress: 0.0,
+				progressAtTime: watch.realStartTime.getTime()
 			}) 
 		})
 	}
@@ -146,5 +209,16 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 		});
 
 		return viewers;
+	}
+
+	VerifyClient(passCode: string, clientId: string): boolean {
+		if(!this.rooms.has(passCode))
+			return false;
+
+		var roomSockets: Map<string, Socket> = this.rooms.get(passCode);
+		if(!roomSockets.has(clientId))
+			return false;
+
+		return true;
 	}
 }

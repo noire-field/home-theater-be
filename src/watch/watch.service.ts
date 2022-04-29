@@ -31,6 +31,7 @@ export class WatchService {
     ) {
         this.watchList = new Map(); 
         this.watchListByCode = new Map();
+        setInterval(this.ProcessWatch, 250);
     }
 
     GetRoom(passCode: string): IWatchShow {
@@ -100,16 +101,45 @@ export class WatchService {
         return 'OK';
     }
 
-    private async StartShow(watch: IWatchShow): Promise<boolean> {
+    private async PrepareShow(watch: IWatchShow): Promise<boolean> {
         if(watch.status !== WatchStatus.WATCH_WAITING)
             return false;
 
         watch.status = WatchStatus.WATCH_INIT;
+        await this.watchGateway.PrepareShow(watch);
+
+        return true;
+    }
+
+    private async StartShow(watch: IWatchShow): Promise<boolean> {
+        if(watch.status !== WatchStatus.WATCH_INIT)
+            return false;
+
+        watch.status = WatchStatus.WATCH_ONLINE;
+        watch.playing = true;
 
         watch.show.status = ShowStatus.Watching;
-        //await watch.show.save(); // Not yet
+        //watch.show.save();
 
         await this.watchGateway.StartShow(watch);
+
+        return true;
+    }
+
+    PauseShow(watch: IWatchShow): boolean {
+        if(!watch.playing) return false;
+
+        watch.playing = false;
+        watch.progress = (new Date().getTime() - watch.realStartTime.getTime()) / 1000;
+
+        return true;
+    }
+
+    ResumeShow(watch: IWatchShow): boolean {
+        if(watch.playing) return false;
+
+        watch.playing = true;
+        watch.realStartTime = new Date(new Date().getTime() - (watch.progress * 1000));
 
         return true;
     }
@@ -130,6 +160,8 @@ export class WatchService {
             show,
             status: WatchStatus.WATCH_WAITING,
             realStartTime: show.startTime,
+            playing: false,
+            progress: 0.0,
             subtitle: {
                 on: false,
                 list: []
@@ -148,6 +180,8 @@ export class WatchService {
                 throw new Error('Unable to parse this subtitle.');
             }
         }
+
+        // Write Later
 
         // Add new show
         this.watchList.set(show.id, watchShow)
@@ -173,16 +207,18 @@ export class WatchService {
         return { auth: jwtData.loggedIn, level: jwtData.level };
     }
 
-    @Cron(CronExpression.EVERY_SECOND)
-    async ProcessWatch() {
+    //@Cron(CronExpression.EVERY_SECOND)
+    private ProcessWatch = async () => {
         var currentTime = new Date();
         this.watchList.forEach(async (watch: IWatchShow, key: number) => {
             if(watch.status == WatchStatus.WATCH_WAITING) { // Wait to start
-                if(currentTime.getTime() >= watch.realStartTime.getTime()) { // Start Time!
+                if(currentTime.getTime() >= (watch.realStartTime.getTime() - (5 * 1000))) { // Prepare Time
+                    this.PrepareShow(watch);
+                }
+            } else if(watch.status == WatchStatus.WATCH_INIT) { // Init
+                if(currentTime.getTime() >= watch.realStartTime.getTime()) { // Start Time
                     this.StartShow(watch);
                 }
-            } else if(watch.status == WatchStatus.WATCH_ONLINE) { // Watching
-                console.log(`Show ${watch.show.title} is online!`);
             }
         });
     }
