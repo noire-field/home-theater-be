@@ -54,12 +54,21 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 					}) 
 					
 					break;
+				// This could be useless because users won't be able to join after it's finished
+				case WatchStatus.WATCH_FINISHED:
+					client.emit('FinishWatching', { 
+						watchStatus: watch.status, // WatchStatus.WATCH_FINISHED
+						showStatus: watch.show.status, // ShowStatus.Finished
+						finishedAt: watch.show.finishedAt
+					}) 
+					
+					break;
 			}
 		}
 	}
 
 	@SubscribeMessage('VideoAction')
-	OnVideoAction(client: Socket, payload: { passCode: string, action: string }) {
+	OnVideoAction(client: Socket, payload: { passCode: string, action: string, to?: number, sendTime?: number }) {
 		if(!this.VerifyClient(payload.passCode, client.id))
 			return;
 
@@ -77,6 +86,13 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 			case 'Resume':
 				if(this.watchService.ResumeShow(watch))
 					this.SendRoomSignal(payload.passCode, (s: Socket) => { s.emit('VideoAction', { action: 'Resume', data: { progress: watch.progress, realStartTime: watch.realStartTime } }) })
+				break;
+			case 'Slide':
+				const currentTime = new Date().getTime();
+				const exactTo = payload.to + ((currentTime - payload.sendTime) / 1000);
+
+				if(this.watchService.SlideShow(watch, exactTo))
+					this.SendRoomSignal(payload.passCode, (s: Socket) => { s.emit('VideoAction', { action: 'Slide', data: { progress: watch.progress, realStartTime: watch.realStartTime, sendTime: new Date().getTime() } }) })
 				break;
 		}
 	}
@@ -96,7 +112,7 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 				const roomSockets = this.rooms.get(clientInRoom.passCode);
 				roomSockets.delete(client.id);
 
-				// Notify all users in room that this user has joined
+				// Notify all users in room that this user has disconnected
 				var roomViewers = this.GetRoomViewers(roomSockets);
 				this.SendRoomSignal(clientInRoom.passCode, (s: Socket) => { s.emit('UpdateViewers', roomViewers) })
 			}
@@ -111,16 +127,26 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 	}
 
 	// From Service
-	CreateRoom(passCode): void {
+	CreateRoom(passCode: string): void {
 		if(this.rooms.has(passCode))
 			return;
 
 		this.rooms.set(passCode, new Map<string, Socket>());		
 	}
 
-	DeleteRoom(passCode): void {
+	RemoveRoom(passCode: string): void {
 		if(!this.rooms.has(passCode))
 			return;
+
+		const room = this.rooms.get(passCode);
+		var count = 0;
+		room.forEach((s: Socket) => { // Loop all clients in room
+			s.emit('KickUserOut');
+			s.disconnect();
+
+			this.clientInRoom.delete(s.id);
+			count++;
+		});
 
 		this.rooms.delete(passCode);
 	}
@@ -182,6 +208,20 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 				playing: watch.playing,
 				progress: 0.0,
 				progressAtTime: watch.realStartTime.getTime()
+			}) 
+		})
+	}
+
+	EndShow(watch: IWatchShow) {
+		if(!this.rooms.has(watch.show.passCode))
+			return;
+
+		// Send StartSignal
+		this.SendRoomSignal(watch.show.passCode, (s: Socket) => { 
+			s.emit('FinishWatching', { 
+				watchStatus: watch.status, // WatchStatus.WATCH_FINISHED
+				showStatus: watch.show.status, // ShowStatus.Finished
+				finishedAt: watch.show.finishedAt.getTime()
 			}) 
 		})
 	}

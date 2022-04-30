@@ -43,6 +43,9 @@ export class WatchService {
             throw new NotFoundException({ message: 'This room can not be found.', langCode: 'Error:Watch.RoomNotFound' });
 
         const watch = this.watchListByCode.get(passCode);
+        if(watch.status === WatchStatus.WATCH_FINISHED)
+            throw new NotFoundException({ message: 'This room is already finished', langCode: 'Error:Watch.RoomAlreadyFinished' });
+
         return { showTitle: watch.show.title, realStartTime: watch.realStartTime } 
     }
 
@@ -55,9 +58,11 @@ export class WatchService {
 
         if(await this.watchGateway.JoinRoom(passCode, joinRoomDTO, auth) !== true) 
             throw new BadRequestException({ message: 'Unable to join this room. (Socket Not Found)', langCode: 'Error:Watch.UnableToJoinRoomSocketNotFound' });
-
+       
         const watch = this.watchListByCode.get(passCode);
-        
+        if(watch.status === WatchStatus.WATCH_FINISHED)
+        throw new NotFoundException({ message: 'This room is already finished', langCode: 'Error:Watch.RoomAlreadyFinished' });
+
         return { 
             showTitle: watch.show.title, 
             realStartTime: watch.realStartTime, 
@@ -126,6 +131,35 @@ export class WatchService {
         return true;
     }
 
+    private async EndShow(watch: IWatchShow, endTime: Date): Promise<boolean> {
+        if(watch.status !== WatchStatus.WATCH_ONLINE)
+            return false;
+
+        watch.status = WatchStatus.WATCH_FINISHED;
+        watch.playing = false;
+        watch.progress = watch.show.duration;
+
+        watch.show.status = ShowStatus.Finished;
+        watch.show.finishedAt = endTime;
+
+        //watch.show.save();
+
+        await this.watchGateway.EndShow(watch);
+
+        return true;
+    }
+
+    private async RemoveShow(watch: IWatchShow): Promise<boolean> {
+        if(watch.status !== WatchStatus.WATCH_FINISHED)
+            return false;
+
+        this.watchList.delete(watch.show.id);
+        this.watchListByCode.delete(watch.show.passCode);
+        this.watchGateway.RemoveRoom(watch.show.passCode);
+
+        return true;
+    }
+
     PauseShow(watch: IWatchShow): boolean {
         if(!watch.playing) return false;
 
@@ -143,6 +177,16 @@ export class WatchService {
 
         return true;
     }
+
+    SlideShow(watch: IWatchShow, to: number): boolean {
+        if(watch.status != WatchStatus.WATCH_ONLINE) return false;
+
+        watch.progress = to;
+        watch.realStartTime = new Date(new Date().getTime() - (watch.progress * 1000));
+
+        return true;
+    }
+
 
     async GetWatchList(): Promise<any> {
         return Array.from(this.watchList);
@@ -218,6 +262,16 @@ export class WatchService {
             } else if(watch.status == WatchStatus.WATCH_INIT) { // Init
                 if(currentTime.getTime() >= watch.realStartTime.getTime()) { // Start Time
                     this.StartShow(watch);
+                }
+            } else if(watch.status == WatchStatus.WATCH_ONLINE) { // Wait to end
+                const showEndTime = watch.realStartTime.getTime() + (watch.show.duration * 1000)
+                if(currentTime.getTime() >= showEndTime) { // End Time
+                    this.EndShow(watch, new Date(showEndTime));
+                }
+            } else if(watch.status == WatchStatus.WATCH_FINISHED) { // Wait to delete
+                const showRemoveTime = watch.realStartTime.getTime() + (watch.show.duration * 1000) + (10 * 1000)
+                if(currentTime.getTime() >= showRemoveTime) { // End Time
+                    this.RemoveShow(watch);
                 }
             }
         });

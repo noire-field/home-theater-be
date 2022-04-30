@@ -22,7 +22,7 @@ export class Show extends BaseEntity {
     startTime: Date;
 
     @Column({ type: 'double' })
-    duration: Number;
+    duration: number;
 
     @Column()
     smartSync: number;
