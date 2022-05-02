@@ -66,7 +66,8 @@ export class WatchService {
         return { 
             showTitle: watch.show.title, 
             realStartTime: watch.realStartTime, 
-            subtitles: joinRoomDTO.withSubtitle && watch.subtitle.on ? watch.subtitle.list : null 
+            subtitles: joinRoomDTO.withSubtitle && watch.subtitle.on ? watch.subtitle.list : null,
+            smartSync: watch.show.smartSync
         }
     }
 
@@ -265,7 +266,7 @@ export class WatchService {
                 }
             } else if(watch.status == WatchStatus.WATCH_ONLINE) { // Wait to end
                 const showEndTime = watch.realStartTime.getTime() + (watch.show.duration * 1000)
-                if(currentTime.getTime() >= showEndTime) { // End Time
+                if(currentTime.getTime() >= showEndTime && watch.playing) { // End Time
                     this.EndShow(watch, new Date(showEndTime));
                 }
             } else if(watch.status == WatchStatus.WATCH_FINISHED) { // Wait to delete

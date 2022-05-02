@@ -141,7 +141,7 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 		const room = this.rooms.get(passCode);
 		var count = 0;
 		room.forEach((s: Socket) => { // Loop all clients in room
-			s.emit('KickUserOut');
+			//s.emit('KickUserOut');
 			s.disconnect();
 
 			this.clientInRoom.delete(s.id);

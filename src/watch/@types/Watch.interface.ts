@@ -35,4 +35,5 @@ export interface IJoinRoom {
     showTitle: string;
     realStartTime: Date;
     subtitles?: ISubtitleLine[];
+    smartSync: number;
 }
