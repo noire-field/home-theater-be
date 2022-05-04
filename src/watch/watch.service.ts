@@ -1,6 +1,6 @@
 import Config from './../config';
 
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { JwtService } from '@nestjs/jwt';
@@ -23,6 +23,7 @@ export class WatchService {
     // Different Key but same Reference Value
     private watchList: Map<number, IWatchShow>;
     private watchListByCode: Map<string, IWatchShow>;
+    private readonly logger = new Logger(WatchService.name);
 
     constructor(
         @InjectRepository(ShowRepository) private showRepo: ShowRepository,
@@ -38,13 +39,29 @@ export class WatchService {
         return this.watchListByCode.get(passCode);
     }
 
+    async GetPreview(passCode: string): Promise<any> {
+        if(!this.watchListByCode.has(passCode))
+            throw new NotFoundException({ message: 'This room can not be found.', langCode: 'Error:Watch.RoomNotFound' });
+
+        const watch = this.watchListByCode.get(passCode);
+        if(watch.status !== WatchStatus.WATCH_WAITING)
+            throw new NotFoundException({ message: 'This room has already started.', langCode: 'Error:Watch.RoomAlreadyStarted' });
+
+        return { 
+            showTitle: watch.show.title, 
+            movieUrl: watch.show.movieUrl,
+            duration: watch.show.duration,
+            subtitles: watch.subtitle.on ? watch.subtitle.list : null 
+        } 
+    }
+
     async FindRoom(passCode: string): Promise<IRoomFound> {
         if(!this.watchListByCode.has(passCode))
             throw new NotFoundException({ message: 'This room can not be found.', langCode: 'Error:Watch.RoomNotFound' });
 
         const watch = this.watchListByCode.get(passCode);
         if(watch.status === WatchStatus.WATCH_FINISHED)
-            throw new NotFoundException({ message: 'This room is already finished', langCode: 'Error:Watch.RoomAlreadyFinished' });
+            throw new NotFoundException({ message: 'This room has already finished', langCode: 'Error:Watch.RoomAlreadyFinished' });
 
         return { showTitle: watch.show.title, realStartTime: watch.realStartTime } 
     }
@@ -61,7 +78,7 @@ export class WatchService {
        
         const watch = this.watchListByCode.get(passCode);
         if(watch.status === WatchStatus.WATCH_FINISHED)
-        throw new NotFoundException({ message: 'This room is already finished', langCode: 'Error:Watch.RoomAlreadyFinished' });
+            throw new NotFoundException({ message: 'This room has already finished', langCode: 'Error:Watch.RoomAlreadyFinished' });
 
         return { 
             showTitle: watch.show.title, 
@@ -77,7 +94,7 @@ export class WatchService {
         
         const watch = this.watchListByCode.get(passCode);
         if(watch.status != WatchStatus.WATCH_WAITING) // Not in Waiting Mode anymore, can not add more time
-            throw new BadRequestException({ message: 'The movie has already started.', langCode: 'Error:Watch.MovieAlreadyStarted' });
+            throw new BadRequestException({ message: 'This room has already started.', langCode: 'Error:Watch.RoomAlreadyStarted' });
 
         var newStartTime = new Date(watch.realStartTime.getTime() + (minuteAmount * 60 * 1000));
 
@@ -96,7 +113,7 @@ export class WatchService {
         
         const watch = this.watchListByCode.get(passCode);
         if(watch.status != WatchStatus.WATCH_WAITING) // Not in Waiting Mode anymore, can not start
-            throw new BadRequestException({ message: 'The movie has already started.', langCode: 'Error:Watch.MovieAlreadyStarted' });
+            throw new BadRequestException({ message: 'The room has already started.', langCode: 'Error:Watch.RoomAlreadyStarted' });
 
         // We don't actually start right away, but set the countdown to 5s
         var newStartTime = new Date(new Date().getTime() + (5 * 1000));

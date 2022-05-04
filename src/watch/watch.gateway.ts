@@ -2,7 +2,7 @@ import Config from './../config';
 
 import { SubscribeMessage, WebSocketGateway, OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, WebSocketServer } from '@nestjs/websockets';
 import { Socket, Server } from 'socket.io';
-import { BadRequestException, forwardRef, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 
 import { WatchService } from './watch.service';
 import { JoinRoomDTO } from './dto/JoinRoom.dto';
@@ -22,6 +22,7 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 	private clients: Map<string, Socket>;
 	private rooms: Map<string, Map<string, Socket>>;
 	private clientInRoom: Map<string, IClientInRoom>;
+	private readonly logger = new Logger(WatchGateway.name);
 
 	constructor(@Inject(forwardRef(() => WatchService)) private readonly watchService: WatchService) {
 		this.clients = new Map();
@@ -98,12 +99,12 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 	}
 
 	afterInit(server: Server) {
-		console.log('Socket Initialized')
+		this.logger.log(`Socket server has initialized.`)
 	}
 	
 	handleDisconnect(client: Socket) {
 		this.clients.delete(client.id);
-		console.log('Client Disconnect: ' + client.id);
+		this.logger.log(`Socket [${client.id}] has disconnected.`)
 
 		// Is this person in a room?
 		if(this.clientInRoom.has(client.id)) {
@@ -123,7 +124,7 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 	
 	handleConnection(client: Socket, ...args: any[]) {
 		this.clients.set(client.id, client);
-		console.log('Client Connect: ' + client.id); // Connection does not mean being in a room.
+		this.logger.log(`Socket [${client.id}] has connected.`)
 	}
 
 	// From Service
@@ -131,7 +132,8 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 		if(this.rooms.has(passCode))
 			return;
 
-		this.rooms.set(passCode, new Map<string, Socket>());		
+		this.rooms.set(passCode, new Map<string, Socket>());	
+		this.logger.log(`Room [${passCode}] has been created.`);	
 	}
 
 	RemoveRoom(passCode: string): void {
@@ -149,6 +151,7 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 		});
 
 		this.rooms.delete(passCode);
+		this.logger.log(`Room [${passCode}] has been removed.`);	
 	}
 
 	async JoinRoom(passCode: string, joinRoomDTO: JoinRoomDTO, auth: { auth: boolean, level: number }): Promise<boolean> {
@@ -172,6 +175,7 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 		this.SendRoomSignal(passCode, (s: Socket) => { s.emit('UpdateViewers', roomViewers) })
 
 		// Next Event: ClientJoinedRoom
+		this.logger.log(`Socket [${joinRoomDTO.clientId}] with name [${joinRoomDTO.friendlyName}] (Lv.${auth.level}) has joined room [${passCode}].`);	
 		
 		return true;
 	}
@@ -194,6 +198,8 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 				watchStatus: watch.status // WatchStatus.WATCH_INIT
 			}) 
 		})
+
+		this.logger.log(`Room [${watch.show.passCode}] has prepared to watch.`);	
 	}
 
 	StartShow(watch: IWatchShow) {
@@ -210,6 +216,8 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 				progressAtTime: watch.realStartTime.getTime()
 			}) 
 		})
+
+		this.logger.log(`Room [${watch.show.passCode}] has started watching.`);	
 	}
 
 	EndShow(watch: IWatchShow) {
@@ -224,6 +232,8 @@ export class WatchGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
 				finishedAt: watch.show.finishedAt.getTime()
 			}) 
 		})
+
+		this.logger.log(`Room [${watch.show.passCode}] has finished watching.`);	
 	}
 
 	private SendRoomSignal(passCode: string, callback: (s: Socket) => void) {

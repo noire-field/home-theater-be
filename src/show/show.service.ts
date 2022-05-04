@@ -204,5 +204,7 @@ export class ShowService {
         // Processed
         await show.save();
         this.processorBusy = false;
+
+        this.logger.log(`Processed show [${show.title}].`);
     }
 }

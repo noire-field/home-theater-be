@@ -15,6 +15,12 @@ export class WatchController {
         return this.watchService.FindRoom(passCode);
     }
 
+    @UseGuards(AuthGuard())
+    @Get('/get-preview/:passCode')
+    async GetPreview(@Param('passCode') passCode: string): Promise<IRoomFound> {
+        return this.watchService.GetPreview(passCode);
+    }
+
     @Post('/room/:passCode/join')
     @HttpCode(200)
     async JoinRoom(
