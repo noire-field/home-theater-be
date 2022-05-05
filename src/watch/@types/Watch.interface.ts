@@ -17,6 +17,18 @@ export interface IWatchShow {
     subtitle: {
         on: boolean;
         list: ISubtitleLine[];
+    },
+    voting: {
+        enable: boolean;
+        active: boolean;
+        toPause: boolean;
+        startTime: number;
+        endTime: number;
+        starterName: string;
+        result: {
+            yes: number;
+            no: number;
+        }
     }
 }
 
@@ -29,6 +41,7 @@ export interface IClientInRoom {
     passCode: string;
     friendlyName: string;
     level: number;
+    voted: number;
 }
 
 export interface IJoinRoom {

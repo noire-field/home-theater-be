@@ -2,7 +2,7 @@ import Config from './../config';
 
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Cron, CronExpression } from '@nestjs/schedule';
+//import { Cron, CronExpression } from '@nestjs/schedule';
 import { JwtService } from '@nestjs/jwt';
 import {  Request } from 'express';
 import axios from 'axios';
@@ -227,6 +227,18 @@ export class WatchService {
             subtitle: {
                 on: false,
                 list: []
+            },
+            voting: {
+                enable: show.votingControl > 0 ? true : false,
+                toPause: true,
+                active: false,
+                startTime: 0,
+                endTime: 0,
+                starterName: '',
+                result: {
+                    yes: 0,
+                    no: 0
+                }
             }
         }
 
@@ -242,8 +254,6 @@ export class WatchService {
                 throw new Error('Unable to parse this subtitle.');
             }
         }
-
-        // Write Later
 
         // Add new show
         this.watchList.set(show.id, watchShow)
