@@ -119,6 +119,7 @@ export class WatchService {
         var newStartTime = new Date(new Date().getTime() + (5 * 1000));
 
         watch.realStartTime = newStartTime;
+
         await this.watchGateway.SetStartTime(passCode, newStartTime);
 
         return 'OK';
@@ -142,7 +143,8 @@ export class WatchService {
         watch.playing = true;
 
         watch.show.status = ShowStatus.Watching;
-        //watch.show.save();
+        watch.show.startTime = watch.realStartTime;
+        watch.show.save();
 
         await this.watchGateway.StartShow(watch);
 
@@ -160,7 +162,7 @@ export class WatchService {
         watch.show.status = ShowStatus.Finished;
         watch.show.finishedAt = endTime;
 
-        //watch.show.save();
+        watch.show.save();
 
         await this.watchGateway.EndShow(watch);
 
@@ -253,6 +255,13 @@ export class WatchService {
             } catch(e) {
                 throw new Error('Unable to parse this subtitle.');
             }
+        }
+
+        // Is it playing?
+        if(show.status == ShowStatus.Watching) {
+            watchShow.playing = false;
+            watchShow.progress = (new Date().getTime() - watchShow.realStartTime.getTime()) / 1000;
+            watchShow.status = WatchStatus.WATCH_ONLINE;
         }
 
         // Add new show
